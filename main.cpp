@@ -5,6 +5,7 @@
 
 //マクロ定義
 #define TAMA_DIV_MAX	4	//弾の画像の最大数
+#define TAMA_MAX	10	//弾の画像の最大数
 
 //構造体の定義
 
@@ -54,6 +55,34 @@ struct AUDIO
 	int playType = -1;	//BGM or SE
 };
 
+//弾の構造体
+struct TAMA
+{
+	int handle[6];		//画像のハンドル
+	char path[255];		//画像のパス
+
+	int DivTate;		//分割数(縦)
+	int DivYoko;		//分割数(横)
+	int DivMAX;			//分割総数
+
+	int AnimeCnt = 0;		//アニメーションカウンタ
+	int AnimeCntMAX = 0;	//アニメーションカウンタMax
+
+	int NowIndex = 0;		//現在の画像の要素数
+
+	int x;					//X位置
+	int y;					//Y位置
+	int width;				//幅
+	int height;				//高さ
+
+	int speed;				//速度
+
+	RECT coll;				//当たり判定
+
+	BOOL IsDraw = FALSE;	//描画できる？
+
+};
+
 //グローバル変数
 //シーンを管理する変数
 GAME_SCENE GameScene;		//現在のゲームのシーン
@@ -76,12 +105,10 @@ int fadeOutCntMax = fadeTimeMax;	//フェードアウトのカウンタMAX
 int fadeInCntInit = fadeTimeMax;	//初期値
 int fadeInCnt = fadeInCntInit;		//フェードアウトのカウンタ
 int fadeInCntMax = fadeTimeMax;		//フェードアウトのカウンタMAX
-
-//弾の画像のハンドル
-int Tama[TAMA_DIV_MAX];
-int TamaIndex = 0;		//画像の添字
-int TamaChangeCnt = 0;		//画像を変えるタイミング
-int TamaChangeCntMax = 30;	//画像を変えるタイミングMAX
+									
+//弾の構造体変数
+struct TAMA tama_moto;
+struct TAMA tama[TAMA_MAX];
 
 //プロトタイプ宣言
 VOID Title(VOID);		//タイトル画面
@@ -104,6 +131,7 @@ VOID ChangeScene(GAME_SCENE scene);	//シーン切り替え
 
 VOID CollUpdatePlayer(CHARACTOR* chara);	//当たり判定の領域を更新
 VOID CollUpdate(CHARACTOR* chara);			//当たり判定
+VOID CollUpdateTama(TAMA* Tama);
 
 BOOL OnCollRect(RECT a, RECT b);			//矩形と矩形の当たり判定
 
@@ -115,6 +143,7 @@ BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatu
 
 VOID GameInit(VOID);	//ゲームのデータの初期化
 
+VOID DrawTama(TAMA* tama);	//弾の描画
 
 // プログラムは WinMain から始まります
 //Windowsのプログラミング方法 = (WinAPI)で動いている！
@@ -222,7 +251,7 @@ int WINAPI WinMain(
 		ScreenFlip();	//ダブルバッファリングした画面を描画
 	}
 	//読み込んだ画像を開放
-	for (int i = 0; i < TAMA_DIV_MAX; i++) { DeleteGraph(Tama[i]); }
+	for (int i = 0; i < TAMA_DIV_MAX; i++) { DeleteGraph(tama_moto.handle[i]); }
 
 	//ＤＸライブラリ使用の終了処理
 	DxLib_End();
@@ -236,9 +265,35 @@ int WINAPI WinMain(
 /// <returns>読み込めたらTRUE / 読み込めなかったらFALSE</returns>
 BOOL GameLoad(VOID)
 {
+	//弾の分割数を設定
+	tama_moto.x = 6;
+	tama_moto.y = 1;
+
+	//弾のパスをコピー
+	strcpyDx(tama_moto.path, ".\\Image\\maru_blue.png");
+
 	//画像を分割して読み込み
-	if (LoadImageDivMem(&Tama[0], ".\\Image\\RedTama.png", 4, 1) == FALSE) { return FALSE; }
+	if (LoadImageDivMem(&tama_moto.handle[0], tama_moto.path, tama_moto.x, tama_moto.y) == FALSE) { return FALSE; }
 	
+	//位置を設定
+	tama_moto.x = GAME_WIDTH / 2 - tama_moto.width / 2;		//中央揃え
+	tama_moto.y = GAME_HEIGHT - tama_moto.height;			//画面下
+
+	//速度
+	tama_moto.speed = 1;	
+
+	//アニメを変える速度
+	tama_moto.AnimeCntMAX = 10;
+
+	//当たり判定の更新
+	CollUpdateTama(&tama_moto);
+	
+	//画像を表示しない
+	tama_moto.IsDraw = FALSE;
+
+	for (int i = 0; i < TAMA_DIV_MAX; i++) { 
+	tama[i] = tama_moto;
+	}
 	return TRUE;	//全て読み込みた！
 }
 
@@ -433,30 +488,38 @@ VOID TitleProc(VOID)
 /// </summary>
 VOID TitleDraw(VOID)
 {
-	//弾の描画
-	DrawGraph(0, 0, Tama[TamaIndex], TRUE);
+	DrawTama(&tama[0]);	//弾を描画
 
-	if (TamaChangeCnt < TamaChangeCntMax)
+	DrawString(0, 0, "タイトル画面", GetColor(0, 0, 0));
+	return;
+}
+/// <summary>
+/// 
+/// </summary>
+/// <param name="tama"></param>
+VOID DrawTama(TAMA* tama)
+{
+	//弾の描画
+	DrawGraph(0, 0, tama->handle[tama->NowIndex], TRUE);
+
+	if (tama->AnimeCnt < tama->AnimeCntMAX)
 	{
-		TamaChangeCnt++;
+		tama->AnimeCnt++;
 	}
 	else
 	{
 		//弾の添字が玉の分割数のの最大よりも小さいとき
-		if (TamaIndex < TAMA_DIV_MAX - 1)
+		if (tama->NowIndex < TAMA_DIV_MAX - 1)
 		{
-			TamaIndex++;			//次の画像へ
+			tama->NowIndex++;			//次の画像へ
 		}
 		else
 		{
-			TamaIndex = 0;			//最初に戻す
+			tama->NowIndex = 0;			//最初に戻す
 		}
-		TamaChangeCnt = 0;
+		tama->AnimeCnt = 0;
 	}
-	DrawString(0, 0, "タイトル画面", GetColor(0, 0, 0));
-	return;
 }
-
 /// <summary>
 /// プレイ画面
 /// </summary>
@@ -660,6 +723,20 @@ VOID CollUpdate(CHARACTOR* chara)
 
 	chara->coll.right = chara->img.x + chara->img.width;
 	chara->coll.bottom = chara->img.y + chara->img.height;
+
+	return;
+}
+/// <summary>
+/// 当たり判定の領域更新
+/// </summary>
+/// <param name="Tama">当たり判定の領域</param>
+VOID CollUpdateTama(TAMA* Tama)
+{
+	Tama->coll.left = Tama->x;
+	Tama->coll.top = Tama->y;
+
+	Tama->coll.right = Tama->x + Tama->width;
+	Tama->coll.bottom = Tama->y + Tama->height;
 
 	return;
 }
