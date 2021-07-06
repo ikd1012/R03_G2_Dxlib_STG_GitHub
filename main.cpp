@@ -4,8 +4,8 @@
 #include "FPS.h"		//FPSの処理
 
 //マクロ定義
-#define TAMA_DIV_MAX	4	//弾の画像の最大数
-#define TAMA_MAX	10	//弾の画像の最大数
+#define TAMA_DIV_MAX	6	//弾の画像の最大数
+#define TAMA_MAX		10	//弾の総数
 
 //構造体の定義
 
@@ -58,15 +58,15 @@ struct AUDIO
 //弾の構造体
 struct TAMA
 {
-	int handle[6];		//画像のハンドル
-	char path[255];		//画像のパス
+	int handle[TAMA_DIV_MAX];	//画像のハンドル
+	char path[255];				//画像のパス
 
-	int DivTate;		//分割数(縦)
-	int DivYoko;		//分割数(横)
-	int DivMAX;			//分割総数
+	int DivTate;	//分割数（縦）
+	int DivYoko;	//分割数（横）
+	int DivMAX;		//分割総数
 
 	int AnimeCnt = 0;		//アニメーションカウンタ
-	int AnimeCntMAX = 0;	//アニメーションカウンタMax
+	int AnimeCntMAX = 0;	//アニメーションカウンタMAX
 
 	int NowIndex = 0;		//現在の画像の要素数
 
@@ -75,9 +75,9 @@ struct TAMA
 	int width;				//幅
 	int height;				//高さ
 
-	int speed;				//速度
+	int Speed;				//速度
 
-	RECT coll;				//当たり判定
+	RECT coll;				//当たり判定（矩形）
 
 	BOOL IsDraw = FALSE;	//描画できる？
 
@@ -105,10 +105,14 @@ int fadeOutCntMax = fadeTimeMax;	//フェードアウトのカウンタMAX
 int fadeInCntInit = fadeTimeMax;	//初期値
 int fadeInCnt = fadeInCntInit;		//フェードアウトのカウンタ
 int fadeInCntMax = fadeTimeMax;		//フェードアウトのカウンタMAX
-									
-//弾の構造体変数
-struct TAMA tama_moto;
-struct TAMA tama[TAMA_MAX];
+
+//弾の構造体
+struct TAMA tama_moto;		//元
+struct TAMA tama[TAMA_MAX];	//実際に使う
+
+//弾の発射カウンタ
+int tamaShotCnt = 0;
+int tamaShotCntMAX = 5;
 
 //プロトタイプ宣言
 VOID Title(VOID);		//タイトル画面
@@ -131,7 +135,7 @@ VOID ChangeScene(GAME_SCENE scene);	//シーン切り替え
 
 VOID CollUpdatePlayer(CHARACTOR* chara);	//当たり判定の領域を更新
 VOID CollUpdate(CHARACTOR* chara);			//当たり判定
-VOID CollUpdateTama(TAMA* Tama);
+VOID CollUpdateTama(TAMA* tama);			//弾の当たり判定の更新
 
 BOOL OnCollRect(RECT a, RECT b);			//矩形と矩形の当たり判定
 
@@ -139,9 +143,9 @@ BOOL GameLoad(VOID);	//ゲームのデータを読み込み
 
 BOOL LoadImageMem(IMAGE* image, const char* path);							//ゲームの画像を読み込み
 BOOL LoadAudio(AUDIO* audio, const char* path, int volume, int playType);	//ゲームの音楽を読み込み
-BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatuTate);	//画像の分割読み込み
+BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatuTate);	//ゲームの画像の分割読み込み
 
-VOID GameInit(VOID);	//ゲームのデータの初期化
+VOID GameInit(VOID);		//ゲームのデータの初期化
 
 VOID DrawTama(TAMA* tama);	//弾の描画
 
@@ -250,7 +254,8 @@ int WINAPI WinMain(
 
 		ScreenFlip();	//ダブルバッファリングした画面を描画
 	}
-	//読み込んだ画像を開放
+
+	//読み込んだ画像を解放
 	for (int i = 0; i < TAMA_DIV_MAX; i++) { DeleteGraph(tama_moto.handle[i]); }
 
 	//ＤＸライブラリ使用の終了処理
@@ -266,34 +271,40 @@ int WINAPI WinMain(
 BOOL GameLoad(VOID)
 {
 	//弾の分割数を設定
-	tama_moto.x = 6;
-	tama_moto.y = 1;
+	tama_moto.DivYoko = 6;
+	tama_moto.DivTate = 1;
 
 	//弾のパスをコピー
 	strcpyDx(tama_moto.path, ".\\Image\\maru_blue.png");
 
 	//画像を分割して読み込み
-	if (LoadImageDivMem(&tama_moto.handle[0], tama_moto.path, tama_moto.x, tama_moto.y) == FALSE) { return FALSE; }
-	
+	if (LoadImageDivMem(&tama_moto.handle[0], tama_moto.path, tama_moto.DivYoko, tama_moto.DivTate) == FALSE) { return FALSE; }
+
+	//幅と高さを取得
+	GetGraphSize(tama_moto.handle[0], &tama_moto.width, &tama_moto.height);
+
 	//位置を設定
-	tama_moto.x = GAME_WIDTH / 2 - tama_moto.width / 2;		//中央揃え
-	tama_moto.y = GAME_HEIGHT - tama_moto.height;			//画面下
+	tama_moto.x = GAME_WIDTH / 2 - tama_moto.width / 2;	//中央揃え
+	tama_moto.y = GAME_HEIGHT - tama_moto.height;		//画面下
 
 	//速度
-	tama_moto.speed = 1;	
+	tama_moto.Speed = 1;
 
 	//アニメを変える速度
 	tama_moto.AnimeCntMAX = 10;
 
 	//当たり判定の更新
 	CollUpdateTama(&tama_moto);
-	
+
 	//画像を表示しない
 	tama_moto.IsDraw = FALSE;
 
-	for (int i = 0; i < TAMA_DIV_MAX; i++) { 
-	tama[i] = tama_moto;
+	//全ての弾に情報をコピー
+	for (int i = 0; i < TAMA_MAX; i++)
+	{
+		tama[i] = tama_moto;
 	}
+
 	return TRUE;	//全て読み込みた！
 }
 
@@ -307,8 +318,6 @@ BOOL GameLoad(VOID)
 /// <returns></returns>
 BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatuTate)
 {
-	
-
 	//弾の読み込み
 	int IsTamaLoad = -1;	//画像が読み込みたか？
 
@@ -320,7 +329,7 @@ BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatu
 	{
 		MessageBox(
 			GetMainWindowHandle(),	//ウィンドウハンドル
-			path,				//本文
+			path,					//本文
 			"画像読み込みエラー",	//タイトル
 			MB_OK					//ボタン
 		);
@@ -337,7 +346,7 @@ BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatu
 	IsTamaLoad = LoadDivGraph(
 		path,							//画像のパス
 		TAMA_DIV_MAX,					//分割総数
-		bunkatuYoko, bunkatuTate,		//横の分割,縦の分割
+		bunkatuYoko, bunkatuTate,							//横の分割,縦の分割
 		TamaWidth / bunkatuYoko, TamaHeight / bunkatuTate,	//画像1つ分の幅,高さ
 		handle							//連続で管理する配列の先頭アドレス
 	);
@@ -347,7 +356,7 @@ BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatu
 	{
 		MessageBox(
 			GetMainWindowHandle(),	//ウィンドウハンドル
-			path,				//本文
+			path,					//本文
 			"画像分割エラー",		//タイトル
 			MB_OK					//ボタン
 		);
@@ -488,38 +497,47 @@ VOID TitleProc(VOID)
 /// </summary>
 VOID TitleDraw(VOID)
 {
-	DrawTama(&tama[0]);	//弾を描画
+
+
 
 	DrawString(0, 0, "タイトル画面", GetColor(0, 0, 0));
 	return;
 }
+
 /// <summary>
-/// 
+/// 弾の描画
 /// </summary>
-/// <param name="tama"></param>
+/// <param name="tama">弾の構造体</param>
 VOID DrawTama(TAMA* tama)
 {
-	//弾の描画
-	DrawGraph(0, 0, tama->handle[tama->NowIndex], TRUE);
+	//弾の描画ができるとき
+	if (tama->IsDraw == TRUE)
+	{
+		//弾の描画
+		DrawGraph(tama->x, tama->y, tama->handle[tama->NowIndex], TRUE);
 
-	if (tama->AnimeCnt < tama->AnimeCntMAX)
-	{
-		tama->AnimeCnt++;
-	}
-	else
-	{
-		//弾の添字が玉の分割数のの最大よりも小さいとき
-		if (tama->NowIndex < TAMA_DIV_MAX - 1)
+		//画像を変えるタイミング
+		if (tama->AnimeCnt < tama->AnimeCntMAX)
 		{
-			tama->NowIndex++;			//次の画像へ
+			tama->AnimeCnt++;
 		}
 		else
 		{
-			tama->NowIndex = 0;			//最初に戻す
+			//弾の添字が弾の分割数の最大よりも小さい時
+			if (tama->NowIndex < TAMA_DIV_MAX - 1)
+			{
+				tama->NowIndex++;	//次の画像へ
+			}
+			else
+			{
+				tama->NowIndex = 0;	//最初に戻す
+			}
+
+			tama->AnimeCnt = 0;
 		}
-		tama->AnimeCnt = 0;
 	}
 }
+
 /// <summary>
 /// プレイ画面
 /// </summary>
@@ -544,6 +562,65 @@ VOID PlayProc(VOID)
 		return;
 	}
 
+
+	//スペースキーを押しているとき
+	if (KeyDown(KEY_INPUT_SPACE) == TRUE)
+	{
+		if (tamaShotCnt == 0)
+		{
+			//弾を発射する(弾を描画する) 
+			for (int i = 0; i < TAMA_MAX; i++)
+			{
+				if (tama[i].IsDraw == FALSE)
+				{
+					//弾を発射する（描画する）
+					tama[i].IsDraw = TRUE;
+
+					//弾の位置を決める
+					tama[i].x = GAME_WIDTH / 2 - tama[i].width / 2;
+					tama[i].y = GAME_HEIGHT / 2 - tama[i].height / 2;
+
+					//弾の当たり判定の更新
+					CollUpdateTama(&tama[i]);
+
+					//弾を１発出したら、ループを抜ける
+					break;
+				}
+			}
+		}
+
+		//弾の発射待ち
+		if (tamaShotCnt < tamaShotCntMAX)
+		{
+			tamaShotCnt++;
+		}
+		else
+		{
+			tamaShotCnt = 0;
+		}
+	}
+
+	//弾を飛ばす
+	for (int i = 0; i < TAMA_MAX; i++)
+	{
+		//描画されているとき
+		if (tama[i].IsDraw == TRUE)
+		{
+			//弾の位置を修正
+			//tama[i].x;
+			tama[i].y -= tama[i].Speed;
+
+			//画面外に出たら、描画しない
+			if (tama[i].y + tama[i].height < 0 ||	//画面外（上）
+				tama[i].y > GAME_HEIGHT ||			//画面外（下）
+				tama[i].x + tama[i].width < 0 ||	//画面外（左）
+				tama[i].x > GAME_WIDTH)				//画面外（右）
+			{
+				tama[i].IsDraw = FALSE;
+			}
+		}
+	}
+
 	return;
 }
 
@@ -552,6 +629,15 @@ VOID PlayProc(VOID)
 /// </summary>
 VOID PlayDraw(VOID)
 {
+	//弾の描画
+	for (int i = 0; i < TAMA_MAX; i++)
+	{
+		//描画されているとき
+		if (tama[i].IsDraw == TRUE)
+		{
+			DrawTama(&tama[i]);
+		}
+	}
 
 	DrawString(0, 0, "プレイ画面", GetColor(0, 0, 0));
 	return;
@@ -726,17 +812,18 @@ VOID CollUpdate(CHARACTOR* chara)
 
 	return;
 }
-/// <summary>
-/// 当たり判定の領域更新
-/// </summary>
-/// <param name="Tama">当たり判定の領域</param>
-VOID CollUpdateTama(TAMA* Tama)
-{
-	Tama->coll.left = Tama->x;
-	Tama->coll.top = Tama->y;
 
-	Tama->coll.right = Tama->x + Tama->width;
-	Tama->coll.bottom = Tama->y + Tama->height;
+/// <summary>
+/// 当たり判定の領域更新(弾)
+/// </summary>
+/// <param name="tama">弾の構造体</param>
+VOID CollUpdateTama(TAMA* tama)
+{
+	tama->coll.left = tama->x;
+	tama->coll.top = tama->y;
+
+	tama->coll.right = tama->x + tama->width;
+	tama->coll.bottom = tama->y + tama->height;
 
 	return;
 }
