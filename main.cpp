@@ -2,13 +2,16 @@
 #include "game.h"		//ゲーム全体のヘッダファイル
 #include "keyboard.h"	//キーボードの処理
 #include "FPS.h"		//FPSの処理
+#include "mouse.h"		//マウスの処理
+#include "shape.h"		//図形の処理
 
-#include <math.h>			//数学
+#include <math.h>		//数学
+
 
 //マクロ定義
-#define TAMA_DIV_MAX	6	//弾の画像の最大数
-#define TAMA_MAX		10000	//弾の総数
-#define TEKI_KIND		8		//敵の種類	
+#define TAMA_DIV_MAX	4	//弾の画像の最大数
+#define TAMA_MAX		1000	//弾の総数
+#define TEKI_KIND		8	//敵の種類
 #define TEKI_MAX		100	//敵の数
 
 //構造体の定義
@@ -74,8 +77,8 @@ struct TAMA
 
 	int NowIndex = 0;		//現在の画像の要素数
 
-	int startX;				//X開始位置
-	int startY;				//Y開始位置
+	int StartX;				//X最初位置
+	int StartY;				//Y最初位置
 
 	float radius;			//半径
 	float degree;			//角度
@@ -120,6 +123,7 @@ int fadeInCntMax = fadeTimeMax;		//フェードアウトのカウンタMAX
 struct TAMA tama_moto;		//元
 struct TAMA tama[TAMA_MAX];	//実際に使う
 
+
 //弾の発射カウンタ
 int tamaShotCnt = 0;
 int tamaShotCntMAX = 5;
@@ -128,7 +132,7 @@ int tamaShotCntMAX = 5;
 CHARACTOR player;
 
 //背景画像
-IMAGE back[2];	//背景は2つの画像
+IMAGE back[2];	//背景は２つの画像
 
 //敵データ(元)
 CHARACTOR teki_moto[TEKI_KIND];
@@ -139,19 +143,19 @@ CHARACTOR teki[TEKI_MAX];
 //敵データのパス
 char tekiPath[TEKI_KIND][255] =
 {
-	{".\\Image\\teki_blue.png"},
-	{".\\Image\\teki_gray.png"},
-	{".\\Image\\teki_green.png"},
-	{".\\Image\\teki_mizu.png"},
-	{".\\Image\\teki_purple.png"},
-	{".\\Image\\teki_red.png"},
-	{".\\Image\\teki_red_big.png"},
-	{".\\Image\\teki_yellow.png"}
+	{".\\Image\\teki_blue.png" },
+	{".\\Image\\teki_gray.png" },
+	{".\\Image\\teki_green.png" },
+	{".\\Image\\teki_mizu.png" },
+	{".\\Image\\teki_purple.png" },
+	{".\\Image\\teki_red.png" },
+	{".\\Image\\teki_red_big.png" },
+	{".\\Image\\teki_yellow.png" }
 };
 
 //敵が出てくるカウント
 int TekiAddCnt = 0;
-int TekiAddCntMAX = 60;		//60FPSで1回…1秒に1回
+int TekiAddCntMAX = 60;	//60FPSで1回・・・１秒に１回
 
 //ゲームのスコア
 int Score = 0;
@@ -178,6 +182,7 @@ VOID ChangeScene(GAME_SCENE scene);	//シーン切り替え
 VOID CollUpdatePlayer(CHARACTOR* chara);	//当たり判定の領域を更新
 VOID CollUpdate(CHARACTOR* chara);			//当たり判定
 VOID CollUpdateTama(TAMA* tama);			//弾の当たり判定の更新
+
 VOID CollUpdateTeki(CHARACTOR* chara);		//敵の当たり判定
 
 BOOL OnCollRect(RECT a, RECT b);			//矩形と矩形の当たり判定
@@ -191,6 +196,7 @@ BOOL LoadImageDivMem(int* handle, const char* path, int bunkatuYoko, int bunkatu
 VOID GameInit(VOID);		//ゲームのデータの初期化
 
 VOID DrawTama(TAMA* tama);	//弾の描画
+
 VOID ShotTama(TAMA* tama, float deg);	//弾の発射
 
 // プログラムは WinMain から始まります
@@ -248,6 +254,9 @@ int WINAPI WinMain(
 		//キーボード入力の更新
 		AllKeyUpdate();
 
+		//マウス入力の更新
+		MouseUpdate();
+
 		//FPS値の更新
 		FPSUpdate();
 
@@ -302,15 +311,15 @@ int WINAPI WinMain(
 	//読み込んだ画像を解放
 	for (int i = 0; i < TAMA_DIV_MAX; i++) { DeleteGraph(tama_moto.handle[i]); }
 
-	//プレイヤー開放
+
+	//プレイヤー解放
 	DeleteGraph(player.img.handle);
 
 	//背景画像解放
 	DeleteGraph(back[0].handle);
 	DeleteGraph(back[1].handle);
-	//DeleteGraph(back[2].handle);
 
-	//敵の画像を開放
+	//敵の画像を解放
 	for (int i = 0; i < TEKI_KIND; i++)
 	{
 		DeleteGraph(teki_moto[i].img.handle);
@@ -332,8 +341,10 @@ BOOL GameLoad(VOID)
 	tama_moto.DivYoko = 6;
 	tama_moto.DivTate = 1;
 
+
 	//弾のパスをコピー
 	strcpyDx(tama_moto.path, ".\\Image\\maru_blue.png");
+
 
 	//画像を分割して読み込み
 	if (LoadImageDivMem(&tama_moto.handle[0], tama_moto.path, tama_moto.DivYoko, tama_moto.DivTate) == FALSE) { return FALSE; }
@@ -363,33 +374,26 @@ BOOL GameLoad(VOID)
 		tama[i] = tama_moto;
 	}
 
-	//プレイヤー画像読み込み
+	//プレイヤーの画像を読み込み
 	if (LoadImageMem(&player.img, ".\\Image\\player.png") == FALSE) { return FALSE; }
 	player.img.x = GAME_WIDTH / 2 - player.img.width;
 	player.img.y = GAME_HEIGHT / 2 - player.img.height;
-	CollUpdatePlayer(&player);		//当たり判定の更新
-	player.img.IsDraw = TRUE;		//描画する
+	CollUpdatePlayer(&player);	//当たり判定の更新
+	player.img.IsDraw = TRUE;	//描画する
 
-	//背景の画像を設定①
+	//背景の画像を読み込み①
 	if (LoadImageMem(&back[0], ".\\Image\\hosi.png") == FALSE) { return FALSE; }
 	back[0].x = 0;
-	back[0].y = -back[0].height;		//画像の高さの分、位置を上にあげる
-	back[0].IsDraw = TRUE;		//描画する
-	/*
-	//背景の画像を設定②
-	if (LoadImageMem(&back[1], ".\\Image\\hosi_nbi.png") == FALSE) { return FALSE; }
-	back[1].x = 0;
-	back[1].y = 0;		//画像の高さの分、位置を上にあげる
-	back[1].IsDraw = TRUE;		//描画する
-	*/
-	//背景の画像を設定③
+	back[0].y = -back[0].height;	//画像の高さ分、位置を上に上げる
+	back[0].IsDraw = TRUE;	//描画する
+
+	//背景の画像を読み込み②
 	if (LoadImageMem(&back[1], ".\\Image\\hosi_rev.png") == FALSE) { return FALSE; }
 	back[1].x = 0;
-	back[1].y = 0;		//画像の高さの分、位置を上にあげる
-	back[1].IsDraw = TRUE;		//描画する
-	
+	back[1].y = 0;
+	back[1].IsDraw = TRUE;	//描画する
 
-		//敵の画像を読み込み
+	//敵の画像を読み込み
 	for (int i = 0; i < TEKI_KIND; i++)
 	{
 		if (LoadImageMem(&teki_moto[i].img, tekiPath[i]) == FALSE) { return FALSE; }
@@ -400,7 +404,6 @@ BOOL GameLoad(VOID)
 	}
 
 	return TRUE;	//全て読み込みた！
-
 }
 
 /// <summary>
@@ -537,31 +540,26 @@ BOOL LoadAudio(AUDIO* audio, const char* path, int volume, int playType)
 /// <param name=""></param>
 VOID GameInit(VOID)
 {
-	//ゲームのスコアを初期化
+	//ゲームスコアを初期化
 	Score = 0;
-	//プレイヤー初期化
+
+	//プレイヤーの初期化
 	player.img.x = GAME_WIDTH / 2 - player.img.width;
 	player.img.y = GAME_HEIGHT / 2 - player.img.height;
-	CollUpdatePlayer(&player);		//当たり判定の更新
-	player.img.IsDraw = TRUE;		//描画する
+	CollUpdatePlayer(&player);	//当たり判定の更新
+	player.img.IsDraw = TRUE;	//描画する
 
 	//背景の画像を設定①
 	back[0].x = 0;
-	back[0].y = -back[0].height;		//画像の高さの分、位置を上にあげる
-	back[0].IsDraw = TRUE;		//描画する
-
+	back[0].y = -back[0].height;	//画像の高さ分、位置を上に上げる
+	back[0].IsDraw = TRUE;	//描画する
 
 	//背景の画像を設定②
 	back[1].x = 0;
-	back[1].y = 0;		//画像の高さの分、位置を上にあげる
-	back[1].IsDraw = TRUE;		//描画する
-	/*
-	//背景の画像を設定③
-	back[2].x = 0;
-	back[2].y = 0;		//画像の高さの分、位置を上にあげる
-	back[2].IsDraw = TRUE;		//描画する
-	*/
-		//敵の初期化
+	back[1].y = 0;
+	back[1].IsDraw = TRUE;	//描画する
+
+	//敵の初期化
 	for (int i = 0; i < TEKI_KIND; i++)
 	{
 		teki_moto[i].img.x = GAME_WIDTH / 2 - teki_moto[i].img.width;
@@ -613,6 +611,9 @@ VOID TitleProc(VOID)
 		//プレイ画面に切り替え
 		ChangeScene(GAME_SCENE_PLAY);
 
+		//マウスを描画しない
+		SetMouseDispFlag(FALSE);
+
 		return;
 	}
 
@@ -625,7 +626,21 @@ VOID TitleProc(VOID)
 VOID TitleDraw(VOID)
 {
 
+	//背景の描画
+	for (int i = 0; i < 2; i++)
+	{
+		//描画
+		DrawGraph(back[i].x, back[i].y, back[i].handle, TRUE);
 
+		//画像が下まで行ったとき
+		if (back[i].y > GAME_HEIGHT)
+		{
+			back[i].y = -back[i].height + 1;	//高さ分、上に戻す
+		}
+
+		//画像を下に動かす
+		back[i].y++;
+	}
 
 	DrawString(0, 0, "タイトル画面", GetColor(0, 0, 0));
 	return;
@@ -686,9 +701,12 @@ VOID PlayProc(VOID)
 		//プレイ画面に切り替え
 		ChangeScene(GAME_SCENE_END);
 
+		//マウスを描画する
+		SetMouseDispFlag(TRUE);	
+
 		return;
 	}
-
+	/*
 	//プレイヤーを操作する
 	if (KeyDown(KEY_INPUT_LEFT) == TRUE)
 	{
@@ -697,6 +715,7 @@ VOID PlayProc(VOID)
 			player.img.x -= player.speed;
 		}
 	}
+
 	if (KeyDown(KEY_INPUT_RIGHT) == TRUE)
 	{
 		if (player.img.x + player.speed <= GAME_WIDTH - player.img.width)
@@ -704,13 +723,15 @@ VOID PlayProc(VOID)
 			player.img.x += player.speed;
 		}
 	}
+
 	if (KeyDown(KEY_INPUT_UP) == TRUE)
 	{
 		if (player.img.y - player.speed >= 0)
 		{
 			player.img.y -= player.speed;
 		}
-	}	
+	}
+
 	if (KeyDown(KEY_INPUT_DOWN) == TRUE)
 	{
 		if (player.img.y + player.speed <= GAME_HEIGHT - player.img.height)
@@ -718,22 +739,85 @@ VOID PlayProc(VOID)
 			player.img.y += player.speed;
 		}
 	}
+	*/	
+
+	//マウスの位置にプレイヤーを置く
+	player.img.x = mouse.Point.x - player.img.width / 2;
+	player.img.y = mouse.Point.y - player.img.height / 2;
 
 	//プレイヤーの当たり判定を更新
 	CollUpdatePlayer(&player);
-
+	/*
 	//スペースキーを押しているとき
 	if (KeyDown(KEY_INPUT_SPACE) == TRUE)
+	*/
+
+	//マウスを左ボタンを押しているとき
+	if (MouseDown(MOUSE_INPUT_LEFT) == TRUE)
 	{
 		if (tamaShotCnt == 0)
 		{
-			for (int deg = 0; deg < 360; deg += 45)
+			//弾を発射する(弾を描画する) 
+			for (int i = 0; i < TAMA_MAX; i++)
+			{
+				if (tama[i].IsDraw == FALSE)
+				{
+					ShotTama(&tama[i], 240);
+
+					//弾を１発出したら、ループを抜ける
+					break;
+				}
+			}
+
+			//弾を発射する(弾を描画する) 
+			for (int i = 0; i < TAMA_MAX; i++)
+			{
+				if (tama[i].IsDraw == FALSE)
+				{
+					ShotTama(&tama[i], 270);
+
+					//弾を１発出したら、ループを抜ける
+					break;
+				}
+			}
+
+			//弾を発射する(弾を描画する) 
+			for (int i = 0; i < TAMA_MAX; i++)
+			{
+				if (tama[i].IsDraw == FALSE)
+				{
+					ShotTama(&tama[i], 300);
+
+					//弾を１発出したら、ループを抜ける
+					break;
+				}
+			}
+
+		}
+
+		//弾の発射待ち
+		if (tamaShotCnt < tamaShotCntMAX)
+		{
+			tamaShotCnt++;
+		}
+		else
+		{
+			tamaShotCnt = 0;
+		}
+	}
+	//マウスを右ボタンを押しているとき
+	if (MouseDown(MOUSE_INPUT_RIGHT) == TRUE)
+	{
+		if (tamaShotCnt == 0)
+		{
+			for (int deg = 0; deg < 360; deg += 30)
 			{
 				//弾を発射する(弾を描画する) 
 				for (int i = 0; i < TAMA_MAX; i++)
 				{
 					if (tama[i].IsDraw == FALSE)
 					{
+
 						ShotTama(&tama[i], deg);
 
 						//弾を１発出したら、ループを抜ける
@@ -742,7 +826,7 @@ VOID PlayProc(VOID)
 				}
 			}
 		}
-
+	
 		//弾の発射待ち
 		if (tamaShotCnt < tamaShotCntMAX)
 		{
@@ -760,16 +844,15 @@ VOID PlayProc(VOID)
 		//描画されているとき
 		if (tama[i].IsDraw == TRUE)
 		{
-
 			//弾の位置を修正
-			tama[i].x = tama[i].startX + cos(tama[i].degree * DX_PI / 180.0f) * tama[i].radius;
-			tama[i].y = tama[i].startY + sin(tama[i].degree * DX_PI / 180.0f) * tama[i].radius;
+						//　中心位置　＋　飛ばす角度→飛ばす距離を計算　＊　距離
+			tama[i].x = tama[i].StartX + cos(tama[i].degree * DX_PI / 180.0f) * tama[i].radius;
+			tama[i].y = tama[i].StartY + sin(tama[i].degree * DX_PI / 180.0f) * tama[i].radius;
 
-			tama[i].degree++;
 			//半径を足す
 			tama[i].radius += tama[i].Speed;
 
-			//弾の当たり判定を更新
+			//弾を当たり判定を更新
 			CollUpdateTama(&tama[i]);
 
 			//画面外に出たら、描画しない
@@ -782,6 +865,7 @@ VOID PlayProc(VOID)
 			}
 		}
 	}
+
 	if (TekiAddCnt < TekiAddCntMAX)
 	{
 		TekiAddCnt++;
@@ -790,42 +874,43 @@ VOID PlayProc(VOID)
 	{
 		TekiAddCnt = 0;
 
-	//敵を生成
+		//敵を生成
 		for (int i = 0; i < TEKI_MAX; i++)
 		{
 			//描画されていない敵を探す
 			if (teki[i].img.IsDraw == FALSE)
 			{
-				int Bunkatu = 10;		//画面の分割数
+				int Bunkatu = 10;	//画面の横分割数
+
 				if (Score < 1000)
 				{
-				teki[i] = teki_moto[0];
+					teki[i] = teki_moto[0];
 				}
-				
 				else if (Score < 2000)
 				{
-				teki[i] = teki_moto[1];
+					teki[i] = teki_moto[1];
 				}
-				
 				else
 				{
-				teki[i] = teki_moto[GetRand(TEKI_KIND - 1)];
+					teki[i] = teki_moto[GetRand(TEKI_KIND - 1)];
 				}
 
 				teki[i].img.x = GetRand(Bunkatu - 1) * GAME_WIDTH / Bunkatu;
 				teki[i].img.y = -teki[i].img.height;
+
 				teki[i].img.IsDraw = TRUE;	//描画する
 				break;
 			}
 		}
 	}
+
 	//敵の処理
 	for (int i = 0; i < TEKI_MAX; i++)
 	{
 		//描画している敵
 		if (teki[i].img.IsDraw == TRUE)
 		{
-			teki[i].img.y += 1;		//とりあえず下へ移動
+			teki[i].img.y += 1;	//とりあえず下へ移動
 
 			//敵の当たり判定を更新
 			CollUpdateTeki(&teki[i]);
@@ -836,8 +921,8 @@ VOID PlayProc(VOID)
 				teki[i].img.IsDraw = FALSE;
 			}
 
-			//敵と自分の弾が当たった時
-			for (int cnt = 0; cnt < TAMA_MAX; i++)
+			//敵と自分の弾が当たったとき
+			for (int cnt = 0; cnt < TAMA_MAX; cnt++)
 			{
 				//描画されているとき
 				if (tama[cnt].IsDraw == TRUE)
@@ -845,50 +930,44 @@ VOID PlayProc(VOID)
 					//当たり判定
 					if (OnCollRect(teki[i].coll, tama[cnt].coll) == TRUE)
 					{
-						tama[cnt].IsDraw = FALSE;		//描画しない
-						teki[i].img.IsDraw = FALSE;		//描画しない
+						tama[cnt].IsDraw = FALSE;		//弾の描画はしない
+						teki[i].img.IsDraw = FALSE;	//敵の描画もしない
 
-						Score += 100;		//スコア加算
+						Score += 100;	//スコア加算
 					}
 				}
 			}
 		}
 	}
 
-	//とりあえずスコア加算
-	//Score++;
-
 	return;
 }
+
 /// <summary>
 /// 弾を飛ばす
 /// </summary>
-/// <param name="tama"></param>
-VOID ShotTama(TAMA* tama,float deg)
+VOID ShotTama(TAMA* tama, float deg)
 {
+	//弾を発射する（描画する）
+	tama->IsDraw = TRUE;
 
-		//弾を発射する（描画する）
-		tama->IsDraw = TRUE;
+	//弾の位置を決める（弾の中心位置）
+	tama->StartX = player.img.x + player.img.width / 2 - tama->width / 2;
+	tama->StartY = player.img.y;
 
-		//弾の位置を決める
-		tama->startX = player.img.x + player.img.width / 2 - tama->width / 2;
-		tama->startY = player.img.y;
+	//弾の速度を変える
+	tama->Speed = 6;
 
-		//弾の速度を変える
-		tama->Speed = 6;
+	//弾の角度
+	tama->degree = deg;
 
-		//弾の角度
-		tama->degree = deg;
-		
-		
-		
-		//弾の半径
-		tama->radius = 0.0f;
+	//弾の半径
+	tama->radius = 0.0f;
 
-		//弾の当たり判定の更新
-		CollUpdateTama(tama);
-
+	//弾の当たり判定の更新
+	CollUpdateTama(tama);
 }
+
 /// <summary>
 /// プレイ画面の描画
 /// </summary>
@@ -905,6 +984,7 @@ VOID PlayDraw(VOID)
 		{
 			back[i].y = -back[i].height + 1;	//高さ分、上に戻す
 		}
+
 		//画像を下に動かす
 		back[i].y++;
 	}
@@ -912,6 +992,7 @@ VOID PlayDraw(VOID)
 	//敵の描画
 	for (int i = 0; i < TEKI_MAX; i++)
 	{
+		/*
 		if (teki[i].img.IsDraw == TRUE)
 		{
 			DrawGraph(teki[i].img.x, teki[i].img.y, teki[i].img.handle, TRUE);
@@ -924,14 +1005,28 @@ VOID PlayDraw(VOID)
 				teki[i].coll.left, teki[i].coll.top, teki[i].coll.right, teki[i].coll.bottom,
 				GetColor(0, 0, 255), FALSE);
 		}
-	}
+		*/
 
+		//敵が描画できるとき
+		if (teki[i].img.IsDraw == TRUE)
+		{
+			DrawGraph(teki[i].img.x, teki[i].img.y, teki[i].img.handle, TRUE);
+
+			//当たり判定の描画
+			if (GAME_DEBUG == TRUE)
+			{
+				DrawBox(
+					teki[i].coll.left, teki[i].coll.top, teki[i].coll.right, teki[i].coll.bottom,
+					GetColor(0, 0, 255), FALSE);
+			}
+		}
+	}
 
 	//プレイヤーの描画
 	if (player.img.IsDraw == TRUE)
 	{
+		//プレイヤーの描画
 		DrawGraph(player.img.x, player.img.y, player.img.handle, TRUE);
-
 
 		//当たり判定の描画
 		if (GAME_DEBUG == TRUE)
@@ -941,6 +1036,7 @@ VOID PlayDraw(VOID)
 				GetColor(255, 0, 0), FALSE);
 		}
 	}
+
 	//弾の描画
 	for (int i = 0; i < TAMA_MAX; i++)
 	{
@@ -960,10 +1056,13 @@ VOID PlayDraw(VOID)
 	}
 
 	//スコアの描画
-	int old = GetFontSize();			//以前のフォントのサイズを取得
-	SetFontSize(40);					//フォントを大きくする
+	int old = GetFontSize();	//以前のフォントのサイズを取得
+	SetFontSize(40);			//フォントを大きくする
 	DrawFormatString(0, 100, GetColor(255, 255, 255), "SCORE:%05d", Score);
-	SetFontSize(old);					//フォントを元に戻す
+	SetFontSize(old);			//フォントをもとに戻す
+
+	//マウスの位置を描画
+	MouseDraw();
 
 	DrawString(0, 0, "プレイ画面", GetColor(0, 0, 0));
 	return;
@@ -1001,6 +1100,7 @@ VOID EndProc(VOID)
 /// </summary>
 VOID EndDraw(VOID)
 {
+
 	DrawString(0, 0, "エンド画面", GetColor(0, 0, 0));
 	return;
 }
@@ -1115,30 +1215,29 @@ VOID ChangeDraw(VOID)
 /// <param name="chara">当たり判定の領域</param>
 VOID CollUpdatePlayer(CHARACTOR* chara)
 {
-	chara->coll.left = chara->img.x;					//当たり判定を微調整
-	chara->coll.top = chara->img.y;						//当たり判定を微調整
+	chara->coll.left = chara->img.x + 10;						//当たり判定を微調整
+	chara->coll.top = chara->img.y + 10;						//当たり判定を微調整
 
-	chara->coll.right = chara->img.x + chara->img.width;		//当たり判定を微調整
-	chara->coll.bottom = chara->img.y + chara->img.height ;	//当たり判定を微調整
+	chara->coll.right = chara->img.x + chara->img.width - 10;		//当たり判定を微調整
+	chara->coll.bottom = chara->img.y + chara->img.height - 10;		//当たり判定を微調整
 
 	return;
 }
+
 /// <summary>
 /// 当たり判定の領域更新（敵）
 /// </summary>
 /// <param name="chara">当たり判定の領域</param>
 VOID CollUpdateTeki(CHARACTOR* chara)
 {
-	chara->coll.left = chara->img.x;					//当たり判定を微調整
-	chara->coll.top = chara->img.y;						//当たり判定を微調整
+	chara->coll.left = chara->img.x;						//当たり判定を微調整
+	chara->coll.top = chara->img.y;							//当たり判定を微調整
 
-	chara->coll.right = chara->img.x + chara->img.width;		//当たり判定を微調整
-	chara->coll.bottom = chara->img.y + chara->img.height ;	//当たり判定を微調整
+	chara->coll.right = chara->img.x + chara->img.width;	//当たり判定を微調整
+	chara->coll.bottom = chara->img.y + chara->img.height;	//当たり判定を微調整
 
 	return;
 }
-
-
 
 /// <summary>
 /// 当たり判定の領域更新
@@ -1169,6 +1268,7 @@ VOID CollUpdateTama(TAMA* tama)
 
 	return;
 }
+
 
 /// <summary>
 /// 矩形と矩形の当たり判定
