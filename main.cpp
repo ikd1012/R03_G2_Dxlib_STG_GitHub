@@ -629,6 +629,7 @@ VOID TitleDraw(VOID)
 	//”wŒi‚Ì•`‰æ
 	for (int i = 0; i < 2; i++)
 	{
+		DrawString(0, 0, "ƒ^ƒCƒgƒ‹‰æ–Ê", GetColor(0, 0, 0));
 		//•`‰æ
 		DrawGraph(back[i].x, back[i].y, back[i].handle, TRUE);
 
@@ -642,7 +643,7 @@ VOID TitleDraw(VOID)
 		back[i].y++;
 	}
 
-	DrawString(0, 0, "ƒ^ƒCƒgƒ‹‰æ–Ê", GetColor(0, 0, 0));
+
 	return;
 }
 
